@@ -40,6 +40,51 @@ class GitRepository:
                 raise Exception(f"Unsupported repo format version {version}")
 
 
+def repo_create(path: str) -> GitRepository:
+    """
+    Create a repo at specified path
+    :param path:
+    :return GitRepository:
+    """
+    repo = GitRepository(path)
+    if repo.worktree.exists():
+        if not repo.worktree.is_dir():
+            raise Exception(f"{path} is not a directory")
+        if not list(repo.worktree.iterdir()):
+            raise Exception(f"{path} is not empty")
+    else:
+        repo.worktree.mkdir()
+
+    create_git_dir_structure(repo)
+
+    with open(repo.gitdir / "description") as file:
+        file.write("ref: refs/heads/master\n")
+
+    with open(repo.gitdir / "config") as file:
+        config = repo_default_config()  # type: configparser.ConfigParser
+        config.write(file)
+
+    return repo
+
+
+def repo_default_config() -> configparser.ConfigParser:
+    config = configparser.ConfigParser()
+    config.add_section("core")
+    config.set("core", "repositoryformatversion", "0")
+    config.set("core", "filemode", "false")
+    config.set("core", "bare", "false")
+    return config
+
+
+def create_git_dir_structure(repo):
+    (repo.gitdir / "branches").mkdir()
+    (repo.gitdir / "objects").mkdir()
+    (repo.gitdir / "refs" / "tags").mkdir()
+    (repo.gitdir / "refs" / "heads").mkdir()
+    (repo.gitdir / "description").touch()
+    (repo.gitdir / "HEAD").touch()
+
+
 def main(argv=sys.argv[1:]):
     args = parser.parse_args(argv)
     print("Hello World!!!")

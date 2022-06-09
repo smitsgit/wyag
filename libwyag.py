@@ -9,6 +9,12 @@ import zlib  # Git compresses everything using ZLIB
 
 parser = argparse.ArgumentParser(description="Its just a content tracker")
 subparser = parser.add_subparsers(title="Commands", dest="command")
+argsp = subparser.add_parser("init", help="Initialize empty repo")
+argsp.add_argument("path",
+                   metavar="directory",
+                   nargs="?",
+                   default=".",
+                   help="Where to create directory")
 
 
 class GitRepository:
@@ -21,13 +27,15 @@ class GitRepository:
 
     def __init__(self, path: str, force=False):
         self.worktree = pathlib.Path(path)
-        self.gitdir = self.worktree / ".git"  # type: Path
+        self.gitdir = (self.worktree / ".git")  # type: Path
 
+        self.gitdir.mkdir()
         if not (force or self.gitdir.is_dir()):
             raise Exception(f"Not a git repo {path}")
 
         self.conf_parser = configparser.ConfigParser()
         cf = self.gitdir / "config"
+        cf.touch()
 
         if cf and cf.exists():
             self.conf_parser.read(cf)
@@ -46,7 +54,7 @@ def repo_create(path: str) -> GitRepository:
     :param path:
     :return GitRepository:
     """
-    repo = GitRepository(path)
+    repo = GitRepository(path, True)
     if repo.worktree.exists():
         if not repo.worktree.is_dir():
             raise Exception(f"{path} is not a directory")
@@ -57,10 +65,10 @@ def repo_create(path: str) -> GitRepository:
 
     create_git_dir_structure(repo)
 
-    with open(repo.gitdir / "description") as file:
+    with open(repo.gitdir / "description", "w") as file:
         file.write("ref: refs/heads/master\n")
 
-    with open(repo.gitdir / "config") as file:
+    with open(repo.gitdir / "config", "w") as file:
         config = repo_default_config()  # type: configparser.ConfigParser
         config.write(file)
 
@@ -79,15 +87,14 @@ def repo_default_config() -> configparser.ConfigParser:
 def create_git_dir_structure(repo):
     (repo.gitdir / "branches").mkdir()
     (repo.gitdir / "objects").mkdir()
-    (repo.gitdir / "refs" / "tags").mkdir()
-    (repo.gitdir / "refs" / "heads").mkdir()
+    (repo.gitdir / "refs" / "tags").mkdir(parents=True)
+    (repo.gitdir / "refs" / "heads").mkdir(parents=True)
     (repo.gitdir / "description").touch()
     (repo.gitdir / "HEAD").touch()
 
 
 def main(argv=sys.argv[1:]):
     args = parser.parse_args(argv)
-    print("Hello World!!!")
     match args.command:
         case "add":
             pass
@@ -100,7 +107,7 @@ def main(argv=sys.argv[1:]):
         case "hash-object":
             pass
         case "init":
-            pass
+            cmd_init(args)
         case "log":
             pass
         case "ls-tree":
@@ -117,3 +124,7 @@ def main(argv=sys.argv[1:]):
             pass
         case "tag":
             pass
+
+
+def cmd_init(args):
+    repo = repo_create(args.path)

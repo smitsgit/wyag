@@ -17,6 +17,58 @@ argsp.add_argument("path",
                    help="Where to create directory")
 
 
+class GitObject:
+    repo = None
+
+    def __init__(self, repo, data=None):
+        self.repo = repo
+        if data:
+            self.deserialize(data)
+
+    def serialize(self):
+        """
+        This function must be implemented by subclasses.
+        It must read object's contents from the data which is a byte string
+        and do whatever it takes to convert it to a meaningful representation.
+        What exactly that means, depends on the subclass
+        :return:
+        """
+        raise Exception("Unimplemented")
+
+    def deserialize(self, data):
+        raise Exception("Unimplemented !!")
+
+
+def obj_read(repo, sha):
+    format_class = None
+    path = repo.gitdir / "objects" / sha[:2] / sha[2:]
+    with open(path, "rb") as file:
+        raw = zlib.decompress(file.read())
+
+        # find the format
+        space_index = raw.find(b' ')
+        format = raw[:space_index]
+
+        # find the size, start looking after the space index
+        zero_index = raw.find(b'\x00', space_index)
+        size = int(raw[space_index: zero_index].decode('ascii'))
+        if size != len(raw) - zero_index - 1:
+            raise Exception(f"Malformed object {sha}: bad length")
+
+        match format:
+            case b'commit':
+                format_class = GitCommit
+            case b'tree':
+                format_class = GitTree
+            case b'tag':
+                format_class = GitTag
+            case b'blob':
+                format_class = GitBlob
+
+        # Call constructor and return object
+        return format_class(repo, raw[y + 1:])
+
+
 class GitRepository:
     """
     A git repository. It has

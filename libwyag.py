@@ -29,7 +29,9 @@ class GitRepository:
         self.worktree = pathlib.Path(path)
         self.gitdir = (self.worktree / ".git")  # type: Path
 
-        self.gitdir.mkdir()
+        if not self.gitdir.exists():
+            self.gitdir.mkdir()
+
         if not (force or self.gitdir.is_dir()):
             raise Exception(f"Not a git repo {path}")
 
@@ -46,6 +48,16 @@ class GitRepository:
             version = int(self.conf_parser.get("core", "repositoryformatversion"))
             if version != 0:
                 raise Exception(f"Unsupported repo format version {version}")
+
+
+def repo_find(path: pathlib.Path):
+    while path != Path("/"):
+        if (path / ".git").is_dir():
+            print(f".git found at {path}")
+            return GitRepository(path)
+        path = path.parent
+    print("Didn't find the repo")
+    return None
 
 
 def repo_create(path: str) -> GitRepository:

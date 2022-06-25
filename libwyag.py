@@ -16,6 +16,18 @@ argsp.add_argument("path",
                    default=".",
                    help="Where to create directory")
 
+argsp = argsubparsers.add_parser("cat-file",
+                                 help="Provide content of repository objects")
+
+argsp.add_argument("type",
+                   metavar="type",
+                   choices=["blob", "commit", "tag", "tree"],
+                   help="Specify the type")
+
+argsp.add_argument("object",
+                   metavar="object",
+                   help="The object to display")
+
 
 class GitObject:
     repo = None
@@ -37,6 +49,32 @@ class GitObject:
 
     def deserialize(self, data):
         raise Exception("Unimplemented !!")
+
+
+class GitBlob(GitObject):
+    fmt = b'blob'
+
+    def serialize(self):
+        return self.blobdata
+
+    def deserialize(self, data):
+        self.blobdata = data
+
+
+def obj_find(repo, name, fmt=None, follow=True):
+    """
+    The reason for this strange small function is that Git has a lot of ways to refer to objects:
+    full hash, short hash, tags… object_find() will be our name resolution function.
+    We’ll only implement it later, so this is a temporary placeholder.
+    This means that until we implement the real thing, the only way we can refer to
+    an object will be by its full hash.
+    :param repo:
+    :param name:
+    :param fmt:
+    :param follow:
+    :return:
+    """
+    return name
 
 
 def obj_read(repo, sha):
@@ -67,6 +105,23 @@ def obj_read(repo, sha):
 
         # Call constructor and return object
         return format_class(repo, raw[y + 1:])
+
+
+def obj_write(obj, actually_write=True):
+    # serialize the object
+    data = obj.serialize()
+    # Add the header
+    result = obj.format + b' ' + str(len(data)).encode() + b'\x00' + data
+
+    # compute the hash
+    sha = hashlib.sha1(result).hexdigest()
+
+    if actually_write:
+        # compute the path
+        path = obj.repo.gitdir / "objects" / sha[:2] / sha[2:]
+        with open(path, "wb") as file:
+            file.write(zlib.compress(result))
+    return sha
 
 
 class GitRepository:
@@ -192,3 +247,14 @@ def main(argv=sys.argv[1:]):
 
 def cmd_init(args):
     repo = repo_create(args.path)
+
+
+def cmd_cat_file(args):
+    path = pathlib.Path(".").absolute()
+    repo = repo_find()
+    cat_file(repo, args.object, fmt=args.type.encode())
+
+
+def cat_file(repo, obj_name, fmt):
+    obj = obj_read(repo, obj_find(repo, obj_name, fmt=fmt))
+    sys.stdout.buffer.write(obj.serialize())

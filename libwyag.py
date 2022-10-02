@@ -9,6 +9,8 @@ import zlib  # Git compresses everything using ZLIB
 
 parser = argparse.ArgumentParser(description="Its just a content tracker")
 subparser = parser.add_subparsers(title="Commands", dest="command")
+subparser.required = True
+
 argsp = subparser.add_parser("init", help="Initialize empty repo")
 argsp.add_argument("path",
                    metavar="directory",
@@ -16,7 +18,7 @@ argsp.add_argument("path",
                    default=".",
                    help="Where to create directory")
 
-argsp = argsubparsers.add_parser("cat-file",
+argsp = subparser.add_parser("cat-file",
                                  help="Provide content of repository objects")
 
 argsp.add_argument("type",
@@ -94,17 +96,17 @@ def obj_read(repo, sha):
             raise Exception(f"Malformed object {sha}: bad length")
 
         match format:
-            case b'commit':
-                format_class = GitCommit
-            case b'tree':
-                format_class = GitTree
-            case b'tag':
-                format_class = GitTag
+            # case b'commit':
+            #     format_class = GitCommit
+            # case b'tree':
+            #     format_class = GitTree
+            # case b'tag':
+            #     format_class = GitTag
             case b'blob':
                 format_class = GitBlob
 
         # Call constructor and return object
-        return format_class(repo, raw[y + 1:])
+        return format_class(repo, raw[zero_index + 1:])
 
 
 def obj_write(obj, actually_write=True):
@@ -158,7 +160,7 @@ class GitRepository:
 
 
 def repo_find(path: pathlib.Path):
-    while path != Path("/"):
+    while path != pathlib.Path("/"):
         if (path / ".git").is_dir():
             print(f".git found at {path}")
             return GitRepository(path)
@@ -185,22 +187,25 @@ def repo_create(path: str) -> GitRepository:
     create_git_dir_structure(repo)
 
     with open(repo.gitdir / "description", "w") as file:
+        file.write("Unnamed repository; edit this file 'description' to name the repository.\n")
+
+    with open(repo.gitdir / "HEAD", "w") as file:
         file.write("ref: refs/heads/master\n")
 
     with open(repo.gitdir / "config", "w") as file:
-        config = repo_default_config()  # type: configparser.ConfigParser
-        config.write(file)
+        config_parser = repo_default_config()  # type: configparser.ConfigParser
+        config_parser.write(file)
 
     return repo
 
 
 def repo_default_config() -> configparser.ConfigParser:
-    config = configparser.ConfigParser()
-    config.add_section("core")
-    config.set("core", "repositoryformatversion", "0")
-    config.set("core", "filemode", "false")
-    config.set("core", "bare", "false")
-    return config
+    config_parser = configparser.ConfigParser()
+    config_parser.add_section("core")
+    config_parser.set("core", "repositoryformatversion", "0")
+    config_parser.set("core", "filemode", "false")
+    config_parser.set("core", "bare", "false")
+    return config_parser
 
 
 def create_git_dir_structure(repo):

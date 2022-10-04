@@ -19,7 +19,7 @@ argsp.add_argument("path",
                    help="Where to create directory")
 
 argsp = subparser.add_parser("cat-file",
-                                 help="Provide content of repository objects")
+                             help="Provide content of repository objects")
 
 argsp.add_argument("type",
                    metavar="type",
@@ -30,6 +30,25 @@ argsp.add_argument("object",
                    metavar="object",
                    help="The object to display")
 
+
+argsp = subparser.add_parser(
+    "hash-object",
+    help="Compute object ID and optionally creates a blob from a file")
+
+argsp.add_argument("-t",
+                   metavar="type",
+                   dest="type",
+                   choices=["blob", "commit", "tag", "tree"],
+                   default="blob",
+                   help="Specify the type")
+
+argsp.add_argument("-w",
+                   dest="write",
+                   action="store_true",
+                   help="Actually write the object into the database")
+
+argsp.add_argument("path",
+                   help="Read object from <file>")
 
 class GitObject:
     repo = None
@@ -80,6 +99,9 @@ def obj_find(repo, name, fmt=None, follow=True):
 
 
 def obj_read(repo, sha):
+    """
+    This function returns objects from the sha1
+    """
     format_class = None
     path = repo.gitdir / "objects" / sha[:2] / sha[2:]
     with open(path, "rb") as file:
@@ -110,17 +132,22 @@ def obj_read(repo, sha):
 
 
 def obj_write(obj, actually_write=True):
+    """
+    This function writes sha1 for a given object
+    """
     # serialize the object
     data = obj.serialize()
     # Add the header
-    result = obj.format + b' ' + str(len(data)).encode() + b'\x00' + data
+    result = obj.fmt + b' ' + str(len(data)).encode() + b'\x00' + data
 
     # compute the hash
     sha = hashlib.sha1(result).hexdigest()
 
     if actually_write:
         # compute the path
-        path = obj.repo.gitdir / "objects" / sha[:2] / sha[2:]
+        path = obj.repo.gitdir / "objects" / sha[:2]
+        path.mkdir(parents=True, exist_ok=True)
+        path = path / sha[2:]
         with open(path, "wb") as file:
             file.write(zlib.compress(result))
     return sha
@@ -139,7 +166,7 @@ class GitRepository:
         self.gitdir = (self.worktree / ".git")  # type: Path
 
         if not self.gitdir.exists():
-            self.gitdir.mkdir()
+            self.gitdir.mkdir(parents=True, exist_ok=True)
 
         if not (force or self.gitdir.is_dir()):
             raise Exception(f"Not a git repo {path}")
@@ -223,13 +250,13 @@ def main(argv=sys.argv[1:]):
         case "add":
             pass
         case "cat-file":
-            pass
+            cmd_cat_file(args)
         case "checkout":
             pass
         case "commit":
             pass
         case "hash-object":
-            pass
+            cmd_hash_object(args)
         case "init":
             cmd_init(args)
         case "log":
@@ -256,10 +283,40 @@ def cmd_init(args):
 
 def cmd_cat_file(args):
     path = pathlib.Path(".").absolute()
-    repo = repo_find()
+    repo = repo_find(path)
     cat_file(repo, args.object, fmt=args.type.encode())
 
 
 def cat_file(repo, obj_name, fmt):
     obj = obj_read(repo, obj_find(repo, obj_name, fmt=fmt))
     sys.stdout.buffer.write(obj.serialize())
+
+
+def cmd_hash_object(args):
+    if args.write:
+        repo = GitRepository(".")
+    else:
+        repo = None
+
+    with open(args.path, "rb") as fd:
+        sha = object_hash(fd, args.type.encode(), repo)
+        print(sha)
+
+
+def object_hash(fd, fmt, repo=None):
+    data = fd.read()
+
+    # Choose constructor depending on
+    # object type found in header.
+    if fmt == b'blob':
+        obj = GitBlob(repo, data)
+    # elif fmt == b'tree':
+    #     obj = GitTree(repo, data)
+    # elif fmt == b'tag':
+    #     obj = GitTag(repo, data)
+    # elif fmt == b'commit':
+    #     obj = GitCommit(repo, data)
+    else:
+        raise Exception("Unknown type %s!" % fmt)
+
+    return obj_write(obj, repo)
